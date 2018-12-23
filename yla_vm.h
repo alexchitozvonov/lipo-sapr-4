@@ -22,6 +22,7 @@
 #define _yla_vm_h
 
 #include "yla_stack.h"
+#include "yla_cop.h"
 #include "yla_type.h"
 #include <stddef.h>
 
@@ -42,7 +43,9 @@
 #define YLA_VM_ERROR_UNKNOWN_COMMAND (-4)
 #define YLA_VM_ERROR_STACK_EMPTY (-5)
 #define YLA_VM_ERROR_STACK_FULL (-6)
-#define YLA_VM_ERROR_VAR_OVERFLOW (-7)
+#define YLA_VM_ERROR_STACK_TAIL_TOO_LONG (-7)
+#define YLA_VM_LINKER_ERROR_TABLE_EMPTY (-8)
+#define YLA_VM_LINKER_ERROR_ADDRESS_NOT_FOUND (-9)
 
 /*
 Executable program structure:
@@ -66,8 +69,8 @@ typedef struct {
 	size_t code_size;
 
 	yla_int_type *vartable;
-    size_t vartable_size;
-
+   size_t vartable_size;
+	
 	size_t pc;
 
 	int last_error;
@@ -103,7 +106,7 @@ int yla_vm_run(yla_vm *vm);
 int yla_vm_do_command(yla_vm *vm);
 
 /**
- * Returns text of last error.
+ * Returns code of last error.
  * @param vm virtual machine structure
  * @return integer value error code
  **/
@@ -114,37 +117,10 @@ int yla_vm_last_error(yla_vm *vm);
  * @param vm virtual machine structure
  * @param error_code code of error occurred
  * @param buf pointer to char to buffer to fill last error text
- * @param buf_len length of buffer to fill
- * @return 0 if all ok or required buffer length to error message if less
+ * @param buf_len lenght of buffer to fill
+ * @return 0 if all ok or required buffer lenght to error message if unsuite
  **/
 int yla_vm_error_text(yla_vm *vm, int error_code, char *buf, int buf_len);
-
-/**
- * Returns trace of current int_value stack.
- * @param vm virtual machine structure
- * @param stack_trace buffer for store stack trace
- * @param stack_trace_size maximum number of values for stack_trace array
- * @return -1 if unexpected error occurred, 0 if all OK. or number of values required for stack_trace if unsuit
- **/
-int yla_vm_stack_trace(yla_vm *vm, yla_int_type *stack_trace, size_t stack_trace_size);
-
-/**
- * Set value to global var.
- * @param vm virtual machine structure
- * @param var_index index of global var
- * @param value value to set
- * @return 0: error, 1: ok
- **/
-int yla_vm_set_var(yla_vm *vm, size_t var_index, yla_int_type value);
-
-/**
- * Get global var's value.
- * @param vm virtual machine structure
- * @param var_index index of global var
- * @param value pointer to save value
- * @return 0: error, 1: ok
- **/
-int yla_vm_get_var(yla_vm *vm, size_t var_index, yla_int_type *value);
 
 /*
 TODO: Add/Remove breakpoints

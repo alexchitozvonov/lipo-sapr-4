@@ -26,7 +26,7 @@
 #include "yla_type.h"
 
 typedef struct {
-    yla_int_type *ptr;
+    int *ptr;
     size_t size;
     size_t count;
 } yla_stack;
@@ -42,9 +42,9 @@ int yla_stack_get_deep(yla_stack* stack, size_t index, yla_int_type *result);
 
 int yla_stack_top(yla_stack* stack, yla_int_type *result);
 
+int yla_stack_tail_delete(yla_stack* stack, yla_int_type tail_size);
+
 int yla_stack_is_empty(yla_stack* stack);
 int yla_stack_is_full(yla_stack* stack);
-
-size_t yla_stack_count(yla_stack *stack);
 
 #endif

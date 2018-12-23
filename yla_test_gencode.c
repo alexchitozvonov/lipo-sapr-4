@@ -19,8 +19,8 @@
 */
 
 #include "yla_test_gencode.h"
+#include "yla_type.h"
 #include "yla_vm.h"
-#include <stdio.h>
 
 void put_commd(yla_cop_type** prg, yla_cop_type value)
 {
@@ -41,7 +41,7 @@ void put_value(yla_cop_type** prg, yla_int_type value)
     for (i=0; i<sizeof(yla_int_type); ++i) {
         unsigned int only_value = (int_value & mask);
         only_value >>= (8*(sizeof(unsigned int)-1));
-        put_commd(prg, (yla_cop_type) only_value);
+        put_commd(prg, only_value);
         int_value <<= 8;
     }
 }
@@ -51,25 +51,49 @@ void put_header(yla_cop_type** prg, size_t stack_size, size_t vartable_size, siz
     put_value(prg, MAGIC_CODE1);
     put_value(prg, MAGIC_CODE2);
     put_value(prg, MAGIC_CODE3);
-    put_value(prg, (yla_int_type) stack_size);
-    put_value(prg, (yla_int_type) vartable_size);
-    put_value(prg, (yla_int_type) code_size);
+    put_value(prg, stack_size);
+    put_value(prg, vartable_size);
+    put_value(prg, code_size);
 }
 
-void code_dump(yla_cop_type *buf, size_t size)
+int link_program(yla_cop_type *prog_ptr, yla_int_type prog_counter, compliance_table *link_table)
 {
-    int i;
-    for (i=0; i<size;) {
-        unsigned char byte = buf[i];
-        printf("%02x", byte);
-        ++i;
-        if (i%16) {
-            printf(" ");
-        }
-        else {
-            printf("\n");
-        }
-    }
-    printf("\n");
+	for (int i = 0; i < 12; i++) {
+		yla_cop_type emptiness = (prog_ptr + i);	// skip header
+		*(prog_ptr)++;
+	}
+	for (int i = 12; i < prog_counter + 12; i++) {
+		if (i != (prog_counter + 12 - 1)) { 
+			yla_cop_type value = *(prog_ptr);
+			if ((value == CALO)		||
+					(value == CJMP)	||
+					(value == CJZ)		||
+					(value == CJNZ)	||
+					(value == CJE)		||
+					(value == CJNE) ||
+					(value == CJG)
+			) {
+				yla_int_type op1 = *(prog_ptr + 1);
+				yla_int_type op2 = *(prog_ptr + 2);
+				
+				yla_int_type mark = ((yla_int_type)op1 << 8) + (yla_int_type)op2;
+				
+				yla_int_type addr = compliance_table_get_addr(link_table, mark);
+				
+				yla_cop_type high_byte = addr >> 8;
+				yla_cop_type low_byte = addr - (high_byte << 8);
+					
+				(prog_ptr) - 2;
+				*(prog_ptr + 1) = high_byte;
+				*(prog_ptr + 2) = low_byte;
+				(prog_ptr) + 2;
+			}
+			
+			*(prog_ptr)++;
+		} else { 
+			break;	
+		}
+	}
+	
+	return 1;
 }
-

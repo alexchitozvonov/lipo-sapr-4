@@ -78,7 +78,7 @@ int name()\
 
 #define YLATEST_ADD_TEST(name) \
  {\
-    extern int name();\
+    extern name();\
     int __yla_test_result = name();\
     __yla_test_suite_result |= __yla_test_result;\
   }

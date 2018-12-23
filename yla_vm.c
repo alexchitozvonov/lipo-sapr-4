@@ -15,20 +15,20 @@
 
     You should have received a copy of the GNU General Public License
     along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
-
 */
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "yla_cop.h"
 #include "yla_vm.h"
-
+#include "yla_type.h"
 
 int yla_vm_get_value(yla_vm *vm, yla_int_type *value);
 
-int yla_vm_set_var_internal(yla_vm *vm, size_t index, yla_int_type value);
-int yla_vm_get_var_internal(yla_vm *vm, size_t index, yla_int_type *value);
+int yla_vm_set_var(yla_vm *vm, size_t index, yla_int_type value);
+int yla_vm_get_var(yla_vm *vm, size_t index, yla_int_type *value);
 
 yla_int_type yla_vm_get_value_internal(yla_cop_type *start);
 
@@ -63,11 +63,11 @@ int yla_vm_init(yla_vm *vm, yla_cop_type *program, size_t program_size)
 		vm->last_error = YLA_VM_ERROR_NO_PROGRAM_CODE;
 		return 0;
 	}
-
+	
 	memcpy(vm->code, program + HEADER_SIZE, vm->code_size);
 	
 	vm->last_error = YLA_VM_ERROR_OK;
-
+	
 	return 1;
 }
 
@@ -107,8 +107,7 @@ int yla_vm_run(yla_vm *vm)
 			vm->last_error = YLA_VM_ERROR_CODE_SEG_EXCEED;
 			return 0;
 		}
-		yla_cop_type cop = vm->code[vm->pc];
-		vm->pc++;
+		yla_cop_type cop = vm->code[vm->pc++];
 
 		cmd_result = yla_vm_do_command_internal(vm, cop);
 		
@@ -151,7 +150,7 @@ int yla_vm_last_error(yla_vm *vm)
 int yla_vm_error_text(yla_vm *vm, int error_code, char *buf, int buf_len)
 {
 	char *error_message;
-	size_t message_len;
+	int message_len;
 
 	if (!vm) {
 		return 0;
@@ -160,58 +159,12 @@ int yla_vm_error_text(yla_vm *vm, int error_code, char *buf, int buf_len)
 	error_message = yla_vm_error_message(error_code);
 	message_len = strlen(error_message) + 1;
 	if (buf == NULL || buf_len <= message_len) {
-		return (int) message_len;
+		return message_len;
 	}
 
 	strcpy(buf, error_message);
 
 	return 0;
-}
-
-int yla_vm_stack_trace(yla_vm *vm, yla_int_type *stack_trace, size_t stack_trace_size)
-{
-	size_t i;
-
-	if (!vm) {
-		return -1;
-	}
-
-	size_t stack_size = yla_stack_count(&vm->stack);
-
-	if (stack_size == 0) {
-		return 0;
-	}
-
-	if (stack_trace == NULL || stack_trace_size < stack_size) {
-		return (int) stack_size;
-	}
-
-	for (i=0; i<stack_size; ++i) {
-		yla_int_type value;
-		if (!yla_stack_get_deep(&vm->stack, i, &value)) {
-			return -1;
-		}
-		stack_trace[i] = value;
-	}
-	return 0;
-}
-
-int yla_vm_set_var(yla_vm *vm, size_t var_index, yla_int_type value)
-{
-	if (!vm) {
-		return 0;
-	}
-
-	return yla_vm_set_var_internal(vm, var_index, value);
-}
-
-int yla_vm_get_var(yla_vm *vm, size_t var_index, yla_int_type *value)
-{
-	if (!vm) {
-		return 0;
-	}
-
-	return yla_vm_get_var_internal(vm, var_index, value);
 }
 
 /*
@@ -228,7 +181,14 @@ int yla_vm_get_value(yla_vm *vm, yla_int_type *value)
 		return 0;
 	}
 	
-	*value = yla_vm_get_value_internal(&(vm->code[vm->pc]));
+	yla_cop_type prog_var[2];
+	yla_cop_type *prog_var_ptr = prog_var;
+	
+	prog_var[0] = vm->code[vm->pc];
+	prog_var[1] = vm->code[vm->pc + 1];
+	
+	*value = yla_vm_get_value_internal(prog_var_ptr);
+	
 	vm->pc += sizeof(yla_int_type);
 
 	return 1;
@@ -236,7 +196,7 @@ int yla_vm_get_value(yla_vm *vm, yla_int_type *value)
 
 yla_int_type yla_vm_get_value_internal(yla_cop_type *start)
 {
-	yla_int_type full_value = 0;
+	unsigned int full_value = 0;
 	size_t i=0;
 	for (i=0; i<sizeof(yla_int_type); ++i) {
 		full_value <<= 8;
@@ -317,10 +277,12 @@ int yla_vm_read_sizes(yla_vm *vm, yla_cop_type **program)
 /*
 Vartable
 */
-int yla_vm_get_var_internal(yla_vm *vm, size_t index, yla_int_type *value)
+int yla_vm_get_var(yla_vm *vm, size_t index, yla_int_type *value)
 {
+	if (!vm) {
+		return 0;
+	}
 	if (index >= vm->vartable_size) {
-		vm->last_error = YLA_VM_ERROR_VAR_OVERFLOW;
 		return 0;
 	}
 
@@ -329,16 +291,16 @@ int yla_vm_get_var_internal(yla_vm *vm, size_t index, yla_int_type *value)
 	return 1;
 }
 
-int yla_vm_set_var_internal(yla_vm *vm, size_t index, yla_int_type value)
+int yla_vm_set_var(yla_vm *vm, size_t index, yla_int_type value)
 {
+	if (!vm) {
+		return 0;
+	}
 	if (index >= vm->vartable_size) {
-		vm->last_error = YLA_VM_ERROR_VAR_OVERFLOW;
 		return 0;
 	}
 
 	vm->vartable[index] = value;
-
-    return 0;
 }
 
 /*
@@ -363,18 +325,76 @@ int yla_vm_stack_push(yla_vm *vm, yla_int_type value)
 	return 1;
 }
 
+int yla_vm_stack_get_deep(yla_vm *vm, yla_int_type index, yla_int_type *value)
+{
+	yla_int_type state = yla_stack_get_deep(&vm->stack, index, value);
+	if (state == -10) {
+		vm->last_error = YLA_VM_ERROR_STACK_EMPTY;
+		return 0;
+	}
+	if (state == -20) {
+		vm->last_error = YLA_VM_ERROR_STACK_FULL;
+		return 0;
+	}
+	return 1;
+}
+
+int yla_vm_stack_set_deep(yla_vm *vm, yla_int_type index, yla_int_type value)
+{
+	yla_int_type state = yla_stack_set_deep(&vm->stack, index, value);
+	if (state == -10) {
+		vm->last_error = YLA_VM_ERROR_STACK_EMPTY;
+		return 0;
+	}
+	if (state == -20) {
+		vm->last_error = YLA_VM_ERROR_STACK_FULL;
+		return 0;
+	}
+	return 1;
+}
+
+int yla_vm_stack_tail_delete(yla_vm *vm, yla_int_type tail_size)
+{
+	if (!yla_stack_tail_delete(&vm->stack, tail_size)) {
+		vm->last_error = YLA_VM_ERROR_STACK_TAIL_TOO_LONG;
+		return 0;	
+	}
+	return 1;
+}
+
 /*
 Perform command by code of operation
 */
 int yla_vm_do_command_internal(yla_vm *vm, yla_cop_type cop)
 {
-	yla_int_type op1;
-	yla_int_type op2;
-	yla_int_type res;
+	yla_int_type op1 = 0;
+	yla_int_type op2 = 0;
+	yla_int_type res = 0;
+	char opchar[5];
 
 	switch(cop) {
 
-		case CNOP:
+		case CNOP:	
+			break;
+		
+		case CLOAD:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			op2 = vm->vartable[op1];
+			if (!yla_vm_stack_push(vm, op2)) {
+				return 0;
+			}
+			break;
+		
+		case CSAVE:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_pull(vm, &op2)) {
+				return 0;
+			}
+			vm->vartable[op1] = op2;
 			break;
 
 		case CPUSH:
@@ -383,6 +403,201 @@ int yla_vm_do_command_internal(yla_vm *vm, yla_cop_type cop)
 			}
 			if (!yla_vm_stack_push(vm, res)) {
 				return 0;
+			}
+			break;
+		
+		case CDUP:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, op1, &op2)) {
+				return 0;
+			}
+			if (!yla_vm_stack_push(vm, op2)) {
+				return 0;
+			}
+			break;
+		
+		case CGDUP:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			op2 = vm->vartable[op1];
+			if (!yla_vm_stack_get_deep(vm, op2, &res)) {
+				return 0;
+			}
+			if (!yla_vm_stack_push(vm, res)) {
+				return 0;
+			}
+			break;
+		
+		case CDEEP:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_pull(vm, &op2)) {
+				return 0;
+			}
+			if (!yla_vm_stack_set_deep(vm, op1, op2)) {
+				return 0;
+			}
+			break;
+			
+		case CGDEEP:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			op2 = vm->vartable[op1];
+			if (!yla_vm_stack_pull(vm, &res)) {
+				return 0;
+			}
+			if (!yla_vm_stack_set_deep(vm, op2, res)) {
+				return 0;
+			}
+			break;
+			
+		case CSTK:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_tail_delete(vm, op1)) {
+				return 0;
+			}
+			break;
+		
+		case CGSTK:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			op2 = vm->vartable[op1];
+			if (!yla_vm_stack_tail_delete(vm, op2)) {
+				return 0;
+			}
+			break;
+		
+		case CTEST:
+			if (!yla_vm_stack_get_deep(vm, 0, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 1, &op2)) {
+				return 0;
+			}
+			if (op1 == op2) {
+				res = 1;
+			} else {
+				res = 0;
+			}
+			if (!yla_vm_stack_push(vm, res)) {
+				return 0;
+			}
+			break;
+		
+		case CCMP:
+			if (!yla_vm_stack_pull(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_pull(vm, &op2)) {
+				return 0;
+			}
+			if (op1 - op2 == 0) {
+				res = 1;
+			} else {
+				res = 0;
+			}
+			if (!yla_vm_stack_push(vm, res)) {
+				return 0;
+			}
+			break;
+			
+		case CALO:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_push(vm, vm->pc))	{
+				return 0;
+			}
+			vm->pc = op1 - 1;
+			break;
+			
+		case CRET:
+			if (!yla_vm_stack_pull(vm, &op1))	{
+				return 0;
+			}
+			vm->pc = op1;
+			break;
+			
+		case CJMP:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			vm->pc = op1 - 1;
+			break;
+		
+		case CJZ:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 0, &op2)) {
+				return 0;
+			}
+			if (op2 == 0) {
+				vm->pc = op1 - 1;
+			}
+			break;
+			
+		case CJNZ:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 0, &op2)) {
+				return 0;
+			}
+			if (op2 != 0) {
+				vm->pc = op1 - 1;
+			}
+			break;
+			
+		case CJE:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 0, &op2)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 1, &res)) {
+				return 0;
+			}
+			if (op2 == res) {
+				vm->pc = op1 - 1;
+			}
+			break;
+			
+		case CJNE:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 0, &op2)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 1, &res)) {
+				return 0;
+			}
+			if (op2 != res) {
+				vm->pc = op1 - 1;
+			}
+			break;
+		case CJG:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 0, &op2)) {
+				return 0;
+			}
+			if (!yla_vm_stack_get_deep(vm, 1, &res)) {
+				return 0;
+			}
+			if (op2 > res) {
+				vm->pc = op1 - 1;
 			}
 			break;
 
@@ -441,31 +656,39 @@ int yla_vm_do_command_internal(yla_vm *vm, yla_cop_type cop)
 				return 0;
 			}
 			break;
-
-		case CLOAD:
-			if (!yla_vm_get_value(vm, &op1)) {
+		
+		case CNEG:
+			if (!yla_vm_stack_pull(vm, &op1)) {
 				return 0;
 			}
-			if (!yla_vm_get_var_internal(vm, (size_t)op1, &res)) {
-				return 0;
-			}
+			res = op1 * (-1);
 			if (!yla_vm_stack_push(vm, res)) {
 				return 0;
 			}
 			break;
-
-        case CSAVE:
-            if (!yla_vm_get_value(vm, &op1)) {
-                return 0;
-            }
-            if (!yla_vm_stack_pull(vm, &res)) {
-                return 0;
-            }
-            if (!yla_vm_set_var_internal(vm, (size_t)op1, res)) {
-                return 0;
-            }
-            break;
-
+		
+		case COUT:
+			if (!yla_vm_get_value(vm, &op1)) {
+				return 0;
+			}
+			if (!yla_vm_stack_pull(vm, &res)) {
+				return 0;
+			}
+			if (op1 == 0x0001) {
+				if (res >= 0 && res <= 9) {
+					fprintf(stdout, "%d \n", res);
+				} else {
+					fprintf(stdout, "%c \n", res);
+				}
+			} else if (op1 == 0x0000) {
+				if (res >= 0 && res <= 9) {
+					fprintf(stdin, "%d \n", res);
+				} else {
+					fprintf(stdin, "%d \n", res);
+				}
+			}
+			break;
+			
 		case CHALT:
 			return -1;
 
